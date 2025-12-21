@@ -456,77 +456,128 @@ public:
         int64_t* matV = new int64_t[nn];
         int64_t* temp = new int64_t[nn];
 
-        for (int64_t i = n - 1; i >= 1; --i)
+        auto cleanup = [&]() {
+            delete[] matU;
+            delete[] matV;
+            delete[] temp;
+            };
+
+        try
         {
-            int64_t pivot = B.at(i, i - 1);
-            if (pivot == 0)
+            for (int64_t i = n - 1; i >= 1; --i)
             {
-                int64_t found = -1;
-                for (int64_t p = 0; p <= i - 2; ++p)
-                {
-                    if (B.at(i, p) != 0) { found = p; break; }
-                }
-                if (found == -1)
-                {
-                    delete[] matU; delete[] matV; delete[] temp;
-                    throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: cannot find non-zero pivot in row " +
-                        std::to_string(i));
-                }
-                B.swap_cols(found, i - 1);
-                B.swap_rows(found, i - 1);
-                pivot = B.at(i, i - 1);
+                int64_t pivot = B.at(i, i - 1);
                 if (pivot == 0)
                 {
-                    delete[] matU; delete[] matV; delete[] temp;
-                    throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: pivot is zero after row/column swap");
+                    int64_t found = -1;
+                    for (int64_t p = 0; p <= i - 2; ++p)
+                    {
+                        if (B.at(i, p) != 0) { found = p; break; }
+                    }
+                    if (found == -1)
+                    {
+                        throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: cannot find non-zero pivot in row " +
+                            std::to_string(i));
+                    }
+                    B.swap_cols(found, i - 1);
+                    B.swap_rows(found, i - 1);
+                    pivot = B.at(i, i - 1);
+                    if (pivot == 0)
+                    {
+                        throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: pivot is zero after row/column swap");
+                    }
                 }
-            }
 
-            int64_t inv_pivot = modInv(pivot);
+                int64_t inv_pivot = modInv(pivot);
 
-            for (size_t t = 0; t < nn; ++t) matV[t] = 0;
-            for (int64_t r = 0; r < n; ++r) matV[(size_t)r * (size_t)n + (size_t)r] = 1 % mod;
-
-            for (int64_t j = 0; j < n; ++j)
-            {
-                if (j == i - 1)
-                    matV[(size_t)(i - 1) * (size_t)n + (size_t)j] = normalize(inv_pivot);
-                else
+                for (size_t t = 0; t < nn; ++t) matV[t] = 0;
+                for (int64_t r = 0; r < n; ++r)
                 {
-                    long long val = -(long long)B.at(i, j) * (long long)inv_pivot;
-                    matV[(size_t)(i - 1) * (size_t)n + (size_t)j] = normalize(val);
+                    size_t idx = (size_t)r * (size_t)n + (size_t)r;
+                    if (idx >= nn) {
+                        cleanup();
+                        throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: index out of bounds in matV initialization");
+                    }
+                    matV[idx] = 1 % mod;
+                }
+
+                size_t row_offset = (size_t)(i - 1) * (size_t)n;
+                if (row_offset >= nn) {
+                    cleanup();
+                    throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: row_offset out of bounds for matV");
+                }
+
+                for (int64_t j = 0; j < n; ++j)
+                {
+                    size_t idx = row_offset + (size_t)j;
+                    if (idx >= nn) {
+                        cleanup();
+                        throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: index out of bounds for matV row");
+                    }
+
+                    if (j == i - 1)
+                        matV[idx] = normalize(inv_pivot);
+                    else
+                    {
+                        long long val = -(long long)B.at(i, j) * (long long)inv_pivot;
+                        matV[idx] = normalize(val);
+                    }
+                }
+
+                for (size_t t = 0; t < nn; ++t) matU[t] = 0;
+                for (int64_t r = 0; r < n; ++r)
+                {
+                    size_t idx = (size_t)r * (size_t)n + (size_t)r;
+                    if (idx >= nn) {
+                        cleanup();
+                        throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: index out of bounds in matU initialization");
+                    }
+                    matU[idx] = 1 % mod;
+                }
+
+                row_offset = (size_t)(i - 1) * (size_t)n;
+                if (row_offset >= nn) {
+                    cleanup();
+                    throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: row_offset out of bounds for matU");
+                }
+
+                for (int64_t j = 0; j < n; ++j)
+                {
+                    size_t idx = row_offset + (size_t)j;
+                    if (idx >= nn) {
+                        cleanup();
+                        throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: index out of bounds for matU row");
+                    }
+                    matU[idx] = normalize(B.at(i, j));
+                }
+
+                mat_mul_mod(B.data, matV, temp, n, mod);
+                mat_mul_mod(matU, temp, B.data, n, mod);
+
+                if (B.at(i, i - 1) != 1 % mod)
+                {
+                    throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: invariant violated at step i=" +
+                        std::to_string(i));
                 }
             }
 
-            for (size_t t = 0; t < nn; ++t) matU[t] = 0;
-            for (int64_t r = 0; r < n; ++r) matU[(size_t)r * (size_t)n + (size_t)r] = 1 % mod;
-            for (int64_t j = 0; j < n; ++j)
+            int64_t* coeffs = new int64_t[(size_t)n + 1];
+            coeffs[0] = normalize(1);
+            for (int64_t k = 1; k <= n; ++k)
             {
-                matU[(size_t)(i - 1) * (size_t)n + (size_t)j] = normalize(B.at(i, j));
+                coeffs[(size_t)k] = normalize(-(long long)B.at(0, k - 1));
             }
 
-            mat_mul_mod(B.data, matV, temp, n, mod);
-            mat_mul_mod(matU, temp, B.data, n, mod);
+            delete[] matU;
+            delete[] matV;
+            delete[] temp;
 
-            if (B.at(i, i - 1) != 1 % mod)
-            {
-                delete[] matU; delete[] matV; delete[] temp;
-                throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: invariant violated at step i=" +
-                    std::to_string(i));
-            }
+            return coeffs;
         }
-
-        int64_t* coeffs = new int64_t[(size_t)n + 1];
-        coeffs[0] = normalize(1);
-        for (int64_t k = 1; k <= n; ++k)
+        catch (...)
         {
-            coeffs[(size_t)k] = normalize(-(long long)B.at(0, k - 1));
+            cleanup();
+            throw;
         }
-
-        delete[] matU;
-        delete[] matV;
-        delete[] temp;
-
-        return coeffs;
     }
 };
