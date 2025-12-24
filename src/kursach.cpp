@@ -92,7 +92,7 @@ void run_experiments(
         return;
     }
 
-    csv << "experiment_index;n;mod;avg_time_microseconds" << std::endl;
+    csv << "n;avg_time_microseconds" << std::endl;
 
     std::mt19937 rng(seed);
     int experiment_index = 0;
@@ -154,7 +154,7 @@ void run_experiments(
             long long avg_us = sum_time_us / successful_tests;
 
             int first_idx_for_n = experiment_index - quantity_per_n;
-            csv << first_idx_for_n << ";" << n << ";" << mod << ";" << avg_us << std::endl;
+            csv << n << ";" << avg_us << std::endl;
 
             std::cout << "AVERAGE for n=" << n << " (based on " << successful_tests
                 << " successful tests): " << avg_us << " us" << std::endl;
