@@ -60,11 +60,7 @@ std::string timestamp_string()
 {
     std::time_t now = std::time(nullptr);
     std::tm local_tm;
-#if defined(_MSC_VER)
     localtime_s(&local_tm, &now);
-#else
-    localtime_r(&now, &local_tm);
-#endif
     char buf[64];
     std::strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", &local_tm);
     return std::string(buf);
@@ -101,7 +97,7 @@ void run_experiments(
     std::mt19937 rng(seed);
     int experiment_index = 0;
 
-    std::cout << "Danilevsky timing experiments (mod = " << mod << ")" << std::endl;
+    std::cout << "Danilevsky timing experiments (mod = " << mod << ")\nVerification is using only as experemential creteria. It is not a strict proof of the correctness of the work." << std::endl;
     std::cout << "n from " << min_n << " to " << max_n << " step " << step_n
         << ", each n: " << quantity_per_n << " matrices" << std::endl;
     std::cout << "Results will be written to " << fname.str() << std::endl;
@@ -137,8 +133,7 @@ void run_experiments(
 
                 std::cout << "  Experiment #" << experiment_index
                     << " n=" << n
-                    << ", time=" << dur.count() << " us"
-                    << (ok ? " [OK]" : " [VERIFICATION FAIL]") << std::endl;
+                    << ", time=" << dur.count() << " micros" << std::endl;
             }
             catch (const RingMatrixException& e) 
             {
@@ -225,7 +220,7 @@ void manual_test()
         std::cout << std::endl;
 
         bool ok = verify_characteristic_polynomial(A, coeffs);
-        std::cout << "Verification p(A) == 0 : " << (ok ? "OK" : "FAIL") << std::endl;
+        std::cout << "Verification p(A) == 0 : " << (ok ? "OK" : "FAIL") << "\n(Verification is using only as experemential creteria. It is not a strict proof of the correctness of the work.)" << std::endl;
 
         delete[] coeffs;
     }

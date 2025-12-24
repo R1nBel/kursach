@@ -21,121 +21,10 @@ public:
 class RingMatrix
 {
 public:
-    int64_t rows;
-    int64_t cols;
+    size_t rows;
+    size_t cols;
     int64_t mod;
     int64_t* data;
-
-private:
-    inline size_t total_elements() const
-    {
-        return (size_t)rows * (size_t)cols;
-    }
-
-    int64_t modInv(int64_t a) const
-    {
-        int64_t m = mod;
-        int64_t aa = a % m;
-        if (aa < 0) aa += m;
-        if (aa == 0)
-        {
-            throw RingMatrixException("RingMatrix::modInv: zero element has no inverse modulo " + std::to_string(mod));
-        }
-
-        int64_t r0 = m, r1 = aa;
-        int64_t s0 = 0, s1 = 1;
-
-        while (r1 != 0)
-        {
-            int64_t q = r0 / r1;
-            int64_t r2 = r0 - q * r1; r0 = r1; r1 = r2;
-            int64_t s2 = s0 - q * s1; s0 = s1; s1 = s2;
-        }
-
-        if (r0 != 1)
-        {
-            throw RingMatrixException("RingMatrix::modInv: element " + std::to_string(a) +
-                " is not invertible modulo " + std::to_string(mod));
-        }
-
-        int64_t inv = s0 % m;
-        if (inv < 0) inv += m;
-        return inv;
-    }
-
-    void swap_rows(int64_t r1, int64_t r2)
-    {
-        if (r1 == r2) return;
-        for (int64_t j = 0; j < cols; ++j)
-        {
-            size_t i1 = index_pos(r1, j);
-            size_t i2 = index_pos(r2, j);
-            int64_t tmp = data[i1];
-            data[i1] = data[i2];
-            data[i2] = tmp;
-        }
-    }
-
-    void swap_cols(int64_t c1, int64_t c2)
-    {
-        if (c1 == c2) return;
-        for (int64_t i = 0; i < rows; ++i)
-        {
-            size_t i1 = index_pos(i, c1);
-            size_t i2 = index_pos(i, c2);
-            int64_t tmp = data[i1];
-            data[i1] = data[i2];
-            data[i2] = tmp;
-        }
-    }
-
-    static void mat_mul_mod(const int64_t* A, const int64_t* B, int64_t* OUT, int64_t n, int64_t mod)
-    {
-        uint64_t M = (uint64_t)mod;
-        uint64_t max_prod = (M - 1ULL) * (M - 1ULL);
-        uint64_t threshold = UINT64_MAX - max_prod;
-
-        for (int64_t i = 0; i < n; ++i)
-        {
-            const int64_t* Arow = A + (size_t)i * (size_t)n;
-            int64_t* OutRow = OUT + (size_t)i * (size_t)n;
-            for (int64_t j = 0; j < n; ++j)
-            {
-                uint64_t acc = 0;
-                for (int64_t k = 0; k < n; ++k)
-                {
-                    uint64_t aval = (uint64_t)Arow[k];
-                    uint64_t bval = (uint64_t)B[(size_t)k * (size_t)n + (size_t)j];
-                    uint64_t prod = aval * bval;
-                    if (acc > threshold) acc %= M;
-                    acc += prod;
-                }
-                OutRow[j] = (int64_t)(acc % M);
-            }
-        }
-    }
-
-public:
-    inline int64_t normalize(long long x) const
-    {
-        long long r = x % mod;
-        if (r < 0) r += mod;
-        return (int64_t)r;
-    }
-
-    inline size_t index_pos(int64_t i, int64_t j) const
-    {
-        return (size_t)i * (size_t)cols + (size_t)j;
-    }
-
-    static int digits_int64(int64_t x)
-    {
-        long long t = x;
-        int d = (t <= 0);
-        if (t < 0) t = -t;
-        while (t) { t /= 10; ++d; }
-        return d;
-    }
 
     RingMatrix(int64_t r, int64_t c, int64_t m)
         : rows(r), cols(c), mod(m), data(nullptr)
@@ -158,30 +47,9 @@ public:
     RingMatrix(const RingMatrix& o)
         : rows(o.rows), cols(o.cols), mod(o.mod), data(nullptr)
     {
-        if (rows <= 0 || cols <= 0)
-        {
-            throw RingMatrixException("RingMatrix copy constructor: invalid dimensions (rows=" +
-                std::to_string(rows) + ", cols=" + std::to_string(cols) + ")");
-        }
-        if ((size_t)rows > SIZE_MAX / (size_t)cols)
-        {
-            throw RingMatrixException("RingMatrix copy constructor: dimensions too large (rows=" +
-                std::to_string(rows) + ", cols=" + std::to_string(cols) + ")");
-        }
         size_t n = (size_t)rows * (size_t)cols;
         data = new int64_t[n];
         memcpy(data, o.data, sizeof(int64_t) * n);
-    }
-
-    friend void swap(RingMatrix& a, RingMatrix& b) noexcept
-    {
-        int64_t tmp_i64;
-        int64_t* tmp_p;
-
-        tmp_i64 = a.rows; a.rows = b.rows; b.rows = tmp_i64;
-        tmp_i64 = a.cols; a.cols = b.cols; b.cols = tmp_i64;
-        tmp_i64 = a.mod;  a.mod = b.mod;  b.mod = tmp_i64;
-        tmp_p = a.data; a.data = b.data; b.data = tmp_p;
     }
 
     RingMatrix& operator=(RingMatrix other)
@@ -195,28 +63,7 @@ public:
         delete[] data;
     }
 
-    inline int64_t& at(int64_t i, int64_t j)
-    {
-        if ((uint64_t)i >= (uint64_t)rows || (uint64_t)j >= (uint64_t)cols)
-        {
-            throw RingMatrixException("RingMatrix::at: index out of bounds (i=" +
-                std::to_string(i) + ", j=" + std::to_string(j) +
-                ", rows=" + std::to_string(rows) + ", cols=" + std::to_string(cols) + ")");
-        }
-        return data[index_pos(i, j)];
-    }
-
-    inline int64_t at(int64_t i, int64_t j) const
-    {
-        if ((uint64_t)i >= (uint64_t)rows || (uint64_t)j >= (uint64_t)cols)
-        {
-            throw RingMatrixException("RingMatrix::at const: index out of bounds (i=" +
-                std::to_string(i) + ", j=" + std::to_string(j) +
-                ", rows=" + std::to_string(rows) + ", cols=" + std::to_string(cols) + ")");
-        }
-        return data[index_pos(i, j)];
-    }
-
+public:
     RingMatrix operator+(const RingMatrix& b) const
     {
         if (rows != b.rows || cols != b.cols || mod != b.mod)
@@ -257,10 +104,6 @@ public:
 
     RingMatrix operator*(int64_t k) const
     {
-        if (mod <= 0)
-        {
-            throw RingMatrixException("RingMatrix::operator*: non-positive modulus (" + std::to_string(mod) + ")");
-        }
         RingMatrix r(rows, cols, mod);
         int64_t kk = normalize(k);
         size_t n = (size_t)rows * (size_t)cols;
@@ -277,6 +120,15 @@ public:
     friend RingMatrix operator*(int64_t k, const RingMatrix& m)
     {
         return m * k;
+    }
+
+    RingMatrix transpose() const
+    {
+        RingMatrix r(cols, rows, mod);
+        for (int64_t i = 0; i < rows; ++i)
+            for (int64_t j = 0; j < cols; ++j)
+                r.data[(size_t)j * (size_t)r.cols + (size_t)i] = data[index_pos(i, j)];
+        return r;
     }
 
     RingMatrix operator*(const RingMatrix& b) const
@@ -316,15 +168,6 @@ public:
                 r.data[(size_t)i * (size_t)b.cols + (size_t)j] = (int64_t)(acc % M);
             }
         }
-        return r;
-    }
-
-    RingMatrix transpose() const
-    {
-        RingMatrix r(cols, rows, mod);
-        for (int64_t i = 0; i < rows; ++i)
-            for (int64_t j = 0; j < cols; ++j)
-                r.data[(size_t)j * (size_t)r.cols + (size_t)i] = data[index_pos(i, j)];
         return r;
     }
 
@@ -433,6 +276,49 @@ public:
             while (*p && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) ++p;
         }
         return mat;
+    }
+
+public:
+    inline int64_t normalize(long long x) const
+    {
+        long long r = x % mod;
+        if (r < 0) r += mod;
+        return (int64_t)r;
+    }
+
+    inline size_t index_pos(int64_t i, int64_t j) const
+    {
+        return (size_t)i * (size_t)cols + (size_t)j;
+    }
+
+    static int digits_int64(int64_t x)
+    {
+        long long t = x;
+        int d = (t <= 0);
+        if (t < 0) t = -t;
+        while (t) { t /= 10; ++d; }
+        return d;
+    }
+
+    friend void swap(RingMatrix& a, RingMatrix& b) noexcept
+    {
+        int64_t tmp_i64;
+        int64_t* tmp_p;
+
+        tmp_i64 = a.rows; a.rows = b.rows; b.rows = tmp_i64;
+        tmp_i64 = a.cols; a.cols = b.cols; b.cols = tmp_i64;
+        tmp_i64 = a.mod;  a.mod = b.mod;  b.mod = tmp_i64;
+        tmp_p = a.data; a.data = b.data; b.data = tmp_p;
+    }
+
+    inline int64_t& at(int64_t i, int64_t j)
+    {
+        return data[index_pos(i, j)];
+    }
+
+    inline int64_t at(int64_t i, int64_t j) const
+    {
+        return data[index_pos(i, j)];
     }
 
     int64_t* characteristicPolynomialDanilevsky() const
@@ -578,6 +464,95 @@ public:
         {
             cleanup();
             throw;
+        }
+    }
+
+private:
+    inline size_t total_elements() const
+    {
+        return (size_t)rows * (size_t)cols;
+    }
+
+    int64_t modInv(int64_t a) const
+    {
+        int64_t m = mod;
+        int64_t aa = a % m;
+        if (aa < 0) aa += m;
+        if (aa == 0)
+        {
+            throw RingMatrixException("RingMatrix::modInv: zero element has no inverse modulo " + std::to_string(mod));
+        }
+
+        int64_t r0 = m, r1 = aa;
+        int64_t s0 = 0, s1 = 1;
+
+        while (r1 != 0)
+        {
+            int64_t q = r0 / r1;
+            int64_t r2 = r0 - q * r1; r0 = r1; r1 = r2;
+            int64_t s2 = s0 - q * s1; s0 = s1; s1 = s2;
+        }
+
+        if (r0 != 1)
+        {
+            throw RingMatrixException("RingMatrix::modInv: element " + std::to_string(a) +
+                " is not invertible modulo " + std::to_string(mod));
+        }
+
+        int64_t inv = s0 % m;
+        if (inv < 0) inv += m;
+        return inv;
+    }
+
+    void swap_rows(int64_t r1, int64_t r2)
+    {
+        if (r1 == r2) return;
+        for (int64_t j = 0; j < cols; ++j)
+        {
+            size_t i1 = index_pos(r1, j);
+            size_t i2 = index_pos(r2, j);
+            int64_t tmp = data[i1];
+            data[i1] = data[i2];
+            data[i2] = tmp;
+        }
+    }
+
+    void swap_cols(int64_t c1, int64_t c2)
+    {
+        if (c1 == c2) return;
+        for (int64_t i = 0; i < rows; ++i)
+        {
+            size_t i1 = index_pos(i, c1);
+            size_t i2 = index_pos(i, c2);
+            int64_t tmp = data[i1];
+            data[i1] = data[i2];
+            data[i2] = tmp;
+        }
+    }
+
+    static void mat_mul_mod(const int64_t* A, const int64_t* B, int64_t* OUT, int64_t n, int64_t mod)
+    {
+        uint64_t M = (uint64_t)mod;
+        uint64_t max_prod = (M - 1ULL) * (M - 1ULL);
+        uint64_t threshold = UINT64_MAX - max_prod;
+
+        for (int64_t i = 0; i < n; ++i)
+        {
+            const int64_t* Arow = A + (size_t)i * (size_t)n;
+            int64_t* OutRow = OUT + (size_t)i * (size_t)n;
+            for (int64_t j = 0; j < n; ++j)
+            {
+                uint64_t acc = 0;
+                for (int64_t k = 0; k < n; ++k)
+                {
+                    uint64_t aval = (uint64_t)Arow[k];
+                    uint64_t bval = (uint64_t)B[(size_t)k * (size_t)n + (size_t)j];
+                    uint64_t prod = aval * bval;
+                    if (acc > threshold) acc %= M;
+                    acc += prod;
+                }
+                OutRow[j] = (int64_t)(acc % M);
+            }
         }
     }
 };
