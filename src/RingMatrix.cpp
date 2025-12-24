@@ -421,14 +421,16 @@ public:
                     matU.data[idx] = normalize(B.at(i, j));
                 }
 
-                mat_mul_mod(B, matV, temp);
-                mat_mul_mod(matU, temp, B);
+                left_mul_by_row(matU, (size_t)(i - 1), B);
+                right_mul_by_row(B, matV, (size_t)(i - 1));
 
                 if (B.at(i, i - 1) != 1 % mod)
                 {
                     throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: invariant violated at step i=" +
                         std::to_string(i));
                 }
+
+                if (i == 1) break;
             }
 
             int64_t* coeffs = new int64_t[(size_t)n + 1];
@@ -509,35 +511,56 @@ private:
         }
     }
 
-    static void mat_mul_mod(const RingMatrix& A, const RingMatrix& B, RingMatrix& OUT)
+    static void left_mul_by_row(const RingMatrix& U, size_t rowU, RingMatrix& B)
     {
-        if (A.cols != B.rows) throw RingMatrixException("mat_mul_mod: dimension mismatch (A.cols != B.rows)");
-        if (A.rows != OUT.rows || B.cols != OUT.cols) throw RingMatrixException("mat_mul_mod: output size mismatch");
-        if (A.mod != B.mod || A.mod != OUT.mod) throw RingMatrixException("mat_mul_mod: modulus mismatch");
+        if (U.rows != B.rows || U.cols != B.cols) throw RingMatrixException("left_mul_by_row: dimension mismatch");
+        if (U.mod != B.mod) throw RingMatrixException("left_mul_by_row: modulus mismatch");
 
-        uint64_t M = (uint64_t)A.mod;
-        uint64_t max_prod = (M - 1ULL) * (M - 1ULL);
-        uint64_t threshold = UINT64_MAX - max_prod;
-        size_t n = A.rows;
-        size_t m = B.cols;
-        size_t p = A.cols;
+        size_t n = B.rows;
+        uint64_t M = (uint64_t)B.mod;
 
-        for (size_t i = 0; i < n; ++i)
+        RingMatrix new_row(1, (int64_t)n, B.mod);
+        for (size_t j = 0; j < n; ++j)
         {
-            const int64_t* Arow = A.data + i * p;
-            int64_t* OutRow = OUT.data + i * m;
-            for (size_t j = 0; j < m; ++j)
+            uint64_t acc = 0;
+            for (size_t k = 0; k < n; ++k)
             {
-                uint64_t acc = 0;
-                for (size_t k = 0; k < p; ++k)
-                {
-                    uint64_t aval = (uint64_t)Arow[k];
-                    uint64_t bval = (uint64_t)B.data[k * m + j];
-                    uint64_t prod = aval * bval;
-                    if (acc > threshold) acc %= M;
-                    acc += prod;
-                }
-                OutRow[j] = (int64_t)(acc % M);
+                uint64_t coeff = (uint64_t)U.data[rowU * n + k];
+                uint64_t val = (uint64_t)B.data[k * n + j];
+                acc += coeff * val;
+            }
+            new_row.data[j] = (int64_t)(acc % M);
+        }
+        for (size_t j = 0; j < n; ++j)
+            B.data[rowU * n + j] = new_row.data[j];
+    }
+
+    static void right_mul_by_row(RingMatrix& B, const RingMatrix& V, size_t rowV)
+    {
+        if (B.cols != V.rows || B.rows != V.rows) throw RingMatrixException("right_mul_by_row: dimension mismatch");
+        if (B.mod != V.mod) throw RingMatrixException("right_mul_by_row: modulus mismatch");
+
+        size_t n = B.rows;
+        size_t m = B.cols;
+        uint64_t M = (uint64_t)B.mod;
+
+        RingMatrix col_copy((int64_t)n, 1, B.mod);
+        for (size_t i = 0; i < n; ++i) col_copy.data[i] = B.data[i * m + rowV];
+
+        for (size_t j = 0; j < m; ++j)
+        {
+            int64_t vcoeff = V.data[rowV * m + j];
+            int64_t delta = (j == rowV) ? (1 % (int64_t)M) : 0;
+            int64_t factor = (int64_t)((vcoeff - delta + (int64_t)M) % (int64_t)M);
+
+            if (factor == 0) continue;
+
+            for (size_t i = 0; i < n; ++i)
+            {
+                uint64_t cur = (uint64_t)B.data[i * m + j];
+                uint64_t add = ((uint64_t)factor * (uint64_t)col_copy.data[i]) % M;
+                uint64_t res = (cur + add) % M;
+                B.data[i * m + j] = (int64_t)res;
             }
         }
     }
