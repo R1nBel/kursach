@@ -11,7 +11,7 @@
 #include <string>
 #include <stdexcept>
 
-class RingMatrixException : public std::runtime_error 
+class RingMatrixException : public std::runtime_error
 {
 public:
     explicit RingMatrixException(const std::string& message)
@@ -286,9 +286,9 @@ public:
         return (int64_t)r;
     }
 
-    inline size_t index_pos(int64_t i, int64_t j) const
+    inline size_t index_pos(size_t i, size_t j) const
     {
-        return (size_t)i * (size_t)cols + (size_t)j;
+        return i * cols + j;
     }
 
     static int digits_int64(int64_t x)
@@ -302,23 +302,19 @@ public:
 
     friend void swap(RingMatrix& a, RingMatrix& b) noexcept
     {
+        size_t tmp_sz;
         int64_t tmp_i64;
         int64_t* tmp_p;
 
-        tmp_i64 = a.rows; a.rows = b.rows; b.rows = tmp_i64;
-        tmp_i64 = a.cols; a.cols = b.cols; b.cols = tmp_i64;
+        tmp_sz = a.rows; a.rows = b.rows; b.rows = tmp_sz;
+        tmp_sz = a.cols; a.cols = b.cols; b.cols = tmp_sz;
         tmp_i64 = a.mod;  a.mod = b.mod;  b.mod = tmp_i64;
         tmp_p = a.data; a.data = b.data; b.data = tmp_p;
     }
 
-    inline int64_t& at(int64_t i, int64_t j)
-    {
-        return data[index_pos(i, j)];
-    }
-
     inline int64_t at(int64_t i, int64_t j) const
     {
-        return data[index_pos(i, j)];
+        return data[index_pos((size_t)i, (size_t)j)];
     }
 
     int64_t* characteristicPolynomialDanilevsky() const
@@ -337,16 +333,9 @@ public:
 
         RingMatrix B(*this);
 
-        size_t nn = (size_t)n * (size_t)n;
-        int64_t* matU = new int64_t[nn];
-        int64_t* matV = new int64_t[nn];
-        int64_t* temp = new int64_t[nn];
-
-        auto cleanup = [&]() {
-            delete[] matU;
-            delete[] matV;
-            delete[] temp;
-            };
+        RingMatrix matU((int64_t)n, (int64_t)n, mod);
+        RingMatrix matV((int64_t)n, (int64_t)n, mod);
+        RingMatrix temp((int64_t)n, (int64_t)n, mod);
 
         try
         {
@@ -376,20 +365,19 @@ public:
 
                 int64_t inv_pivot = modInv(pivot);
 
-                for (size_t t = 0; t < nn; ++t) matV[t] = 0;
+                size_t nn = (size_t)n * (size_t)n;
+                for (size_t t = 0; t < nn; ++t) matV.data[t] = 0;
                 for (int64_t r = 0; r < n; ++r)
                 {
                     size_t idx = (size_t)r * (size_t)n + (size_t)r;
                     if (idx >= nn) {
-                        cleanup();
                         throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: index out of bounds in matV initialization");
                     }
-                    matV[idx] = 1 % mod;
+                    matV.data[idx] = 1 % mod;
                 }
 
                 size_t row_offset = (size_t)(i - 1) * (size_t)n;
                 if (row_offset >= nn) {
-                    cleanup();
                     throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: row_offset out of bounds for matV");
                 }
 
@@ -397,33 +385,30 @@ public:
                 {
                     size_t idx = row_offset + (size_t)j;
                     if (idx >= nn) {
-                        cleanup();
                         throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: index out of bounds for matV row");
                     }
 
                     if (j == i - 1)
-                        matV[idx] = normalize(inv_pivot);
+                        matV.data[idx] = normalize(inv_pivot);
                     else
                     {
                         long long val = -(long long)B.at(i, j) * (long long)inv_pivot;
-                        matV[idx] = normalize(val);
+                        matV.data[idx] = normalize(val);
                     }
                 }
 
-                for (size_t t = 0; t < nn; ++t) matU[t] = 0;
+                for (size_t t = 0; t < nn; ++t) matU.data[t] = 0;
                 for (int64_t r = 0; r < n; ++r)
                 {
                     size_t idx = (size_t)r * (size_t)n + (size_t)r;
                     if (idx >= nn) {
-                        cleanup();
                         throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: index out of bounds in matU initialization");
                     }
-                    matU[idx] = 1 % mod;
+                    matU.data[idx] = 1 % mod;
                 }
 
                 row_offset = (size_t)(i - 1) * (size_t)n;
                 if (row_offset >= nn) {
-                    cleanup();
                     throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: row_offset out of bounds for matU");
                 }
 
@@ -431,14 +416,13 @@ public:
                 {
                     size_t idx = row_offset + (size_t)j;
                     if (idx >= nn) {
-                        cleanup();
                         throw RingMatrixException("RingMatrix::characteristicPolynomialDanilevsky: index out of bounds for matU row");
                     }
-                    matU[idx] = normalize(B.at(i, j));
+                    matU.data[idx] = normalize(B.at(i, j));
                 }
 
-                mat_mul_mod(B.data, matV, temp, n, mod);
-                mat_mul_mod(matU, temp, B.data, n, mod);
+                mat_mul_mod(B, matV, temp);
+                mat_mul_mod(matU, temp, B);
 
                 if (B.at(i, i - 1) != 1 % mod)
                 {
@@ -454,15 +438,10 @@ public:
                 coeffs[(size_t)k] = normalize(-(long long)B.at(0, k - 1));
             }
 
-            delete[] matU;
-            delete[] matV;
-            delete[] temp;
-
             return coeffs;
         }
         catch (...)
         {
-            cleanup();
             throw;
         }
     }
@@ -509,8 +488,8 @@ private:
         if (r1 == r2) return;
         for (int64_t j = 0; j < cols; ++j)
         {
-            size_t i1 = index_pos(r1, j);
-            size_t i2 = index_pos(r2, j);
+            size_t i1 = index_pos((size_t)r1, (size_t)j);
+            size_t i2 = index_pos((size_t)r2, (size_t)j);
             int64_t tmp = data[i1];
             data[i1] = data[i2];
             data[i2] = tmp;
@@ -522,31 +501,38 @@ private:
         if (c1 == c2) return;
         for (int64_t i = 0; i < rows; ++i)
         {
-            size_t i1 = index_pos(i, c1);
-            size_t i2 = index_pos(i, c2);
+            size_t i1 = index_pos((size_t)i, (size_t)c1);
+            size_t i2 = index_pos((size_t)i, (size_t)c2);
             int64_t tmp = data[i1];
             data[i1] = data[i2];
             data[i2] = tmp;
         }
     }
 
-    static void mat_mul_mod(const int64_t* A, const int64_t* B, int64_t* OUT, int64_t n, int64_t mod)
+    static void mat_mul_mod(const RingMatrix& A, const RingMatrix& B, RingMatrix& OUT)
     {
-        uint64_t M = (uint64_t)mod;
+        if (A.cols != B.rows) throw RingMatrixException("mat_mul_mod: dimension mismatch (A.cols != B.rows)");
+        if (A.rows != OUT.rows || B.cols != OUT.cols) throw RingMatrixException("mat_mul_mod: output size mismatch");
+        if (A.mod != B.mod || A.mod != OUT.mod) throw RingMatrixException("mat_mul_mod: modulus mismatch");
+
+        uint64_t M = (uint64_t)A.mod;
         uint64_t max_prod = (M - 1ULL) * (M - 1ULL);
         uint64_t threshold = UINT64_MAX - max_prod;
+        size_t n = A.rows;
+        size_t m = B.cols;
+        size_t p = A.cols;
 
-        for (int64_t i = 0; i < n; ++i)
+        for (size_t i = 0; i < n; ++i)
         {
-            const int64_t* Arow = A + (size_t)i * (size_t)n;
-            int64_t* OutRow = OUT + (size_t)i * (size_t)n;
-            for (int64_t j = 0; j < n; ++j)
+            const int64_t* Arow = A.data + i * p;
+            int64_t* OutRow = OUT.data + i * m;
+            for (size_t j = 0; j < m; ++j)
             {
                 uint64_t acc = 0;
-                for (int64_t k = 0; k < n; ++k)
+                for (size_t k = 0; k < p; ++k)
                 {
                     uint64_t aval = (uint64_t)Arow[k];
-                    uint64_t bval = (uint64_t)B[(size_t)k * (size_t)n + (size_t)j];
+                    uint64_t bval = (uint64_t)B.data[k * m + j];
                     uint64_t prod = aval * bval;
                     if (acc > threshold) acc %= M;
                     acc += prod;
