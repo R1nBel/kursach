@@ -103,7 +103,7 @@ void run_experiments(
     std::cout << "Results will be written to " << fname.str() << std::endl;
     std::cout << "------------------------------------------------" << std::endl;
 
-    for (int n = min_n; n <= max_n; n += step_n)
+    for (int n = min_n; n <= max_n; n *= step_n)
     {
         std::cout << "Processing n = " << n << " ..." << std::endl;
         long long sum_time_us = 0;
@@ -239,7 +239,7 @@ void manual_test()
 int main(int argc, char** argv)
 {
     int min_n = 2;
-    int max_n = 40;
+    int max_n = 2048;
     int step_n = 2;
     int mod = 1000003;
     unsigned int seed = 12345;
