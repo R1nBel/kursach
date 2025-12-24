@@ -239,8 +239,8 @@ void manual_test()
 int main(int argc, char** argv)
 {
     int min_n = 2;
-    int max_n = 100;
-    int step_n = 1;
+    int max_n = 40;
+    int step_n = 2;
     int mod = 1000003;
     unsigned int seed = 12345;
     int quantity_per_n = 5;
